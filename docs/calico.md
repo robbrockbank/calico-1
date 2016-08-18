@@ -68,6 +68,19 @@ h2, h3, h4 {
 }
 </style>
 
+<div class="colContainer">
+  <div class="col3rd">
+    <a href="" class="button">Kubernetes version {{page.kubernetes_version}}</a>
+  </div>
+  <div class="col3rd">
+    <a href="" class="button">OpenStack version 
+    {{page.openstack_version}}</a>
+  </div>
+  <div class="col3rd">
+    <a href="" class="button">DC/OS version {{page.DCOS_version}}</a>
+  </div>
+</div>
+
 This documentation is for Calico version {{ page.version }} - for earlier versions, see [here]({{base}}/docs/version).
 
 Calico version {{ page.version }} supports integrations with Kubernetes, Docker, Mesos (including DC/OS) and OpenStack.  See [here]({{base}}/docs/reference/supported-platforms) for information on the versions supported by this release.

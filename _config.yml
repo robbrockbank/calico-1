@@ -49,12 +49,17 @@ defaults:
       path: ""
     values:
       version: 1.4
+      openstack_version: Mitaka
+      kubernetes_version: TBC
+      DCOS_version: 1.2
+      docker_version: 1.11
   -
     scope:
       path: "docs"
     values:
       layout: docwithnav
       version: 1.4
+
 
 # Markdown Processors
 rdiscount:
