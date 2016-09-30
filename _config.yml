@@ -26,6 +26,6 @@ defaults:
       version: master
   -
     scope:
-      path: "0.1"
+      path: "0_1"
     values:
-      version: 0.1
+      version: "0_1"
