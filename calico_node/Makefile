@@ -357,19 +357,19 @@ st: dist/calicoctl dist/calicoctl-v1.0.2 busybox.tar routereflector.tar calico-n
 	# All of code under test is mounted into the container.
 	#   - This also provides access to calicoctl and the docker client
 	# $(MAKE) st-checks
-	docker run --uts=host \
-	           --pid=host \
-	           --net=host \
-	           --privileged \
-	           -e HOST_CHECKOUT_DIR=$(HOST_CHECKOUT_DIR) \
-	           -e DEBUG_FAILURES=$(DEBUG_FAILURES) \
-	           -e MY_IP=$(LOCAL_IP_ENV) \
-	           -e NODE_CONTAINER_NAME=$(NODE_CONTAINER_NAME) \
-	           --rm -ti \
-	           -v /var/run/docker.sock:/var/run/docker.sock \
-	           -v $(SOURCE_DIR):/code \
-	           $(SYSTEMTEST_CONTAINER) \
-	           sh -c 'nosetests $(ST_TO_RUN) -sv --nologcapture  --with-xunit --xunit-file="/code/nosetests.xml" --with-timer $(ST_OPTIONS)'
+	#docker run --uts=host \
+	#           --pid=host \
+	#           --net=host \
+	#           --privileged \
+	#           -e HOST_CHECKOUT_DIR=$(HOST_CHECKOUT_DIR) \
+	#           -e DEBUG_FAILURES=$(DEBUG_FAILURES) \
+	#           -e MY_IP=$(LOCAL_IP_ENV) \
+	#           -e NODE_CONTAINER_NAME=$(NODE_CONTAINER_NAME) \
+	#           --rm -ti \
+	#           -v /var/run/docker.sock:/var/run/docker.sock \
+	#           -v $(SOURCE_DIR):/code \
+	#           $(SYSTEMTEST_CONTAINER) \
+	#           sh -c 'nosetests $(ST_TO_RUN) -sv --nologcapture  --with-xunit --xunit-file="/code/nosetests.xml" --with-timer $(ST_OPTIONS)'
 	$(MAKE) stop-etcd
 
 ## Run the STs in a container using etcd with SSL certificate/key/CA verification.
