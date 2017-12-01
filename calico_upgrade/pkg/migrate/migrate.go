@@ -17,22 +17,26 @@ package migrate
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
+	"errors"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"errors"
-	"time"
 
 	"github.com/projectcalico/calico/calico_upgrade/pkg/upgradeclients"
 	apiv3 "github.com/projectcalico/libcalico-go/lib/apis/v3"
 	bapi "github.com/projectcalico/libcalico-go/lib/backend/api"
-	"github.com/projectcalico/libcalico-go/lib/backend/model"
 	"github.com/projectcalico/libcalico-go/lib/clientv3"
 	cerrors "github.com/projectcalico/libcalico-go/lib/errors"
-	"github.com/projectcalico/libcalico-go/lib/numorstring"
 	"github.com/projectcalico/libcalico-go/lib/options"
+	apiv3 "github.com/projectcalico/libcalico-go/lib/apis/v3"
+	"github.com/projectcalico/libcalico-go/lib/backend/model"
+	"github.com/projectcalico/libcalico-go/lib/errors"
+	"github.com/projectcalico/libcalico-go/lib/numorstring"
 	"github.com/projectcalico/libcalico-go/lib/upgrade/etcd/conversionv1v3"
 	validatorv3 "github.com/projectcalico/libcalico-go/lib/validator/v3"
 	"github.com/projectcalico/yaml"
@@ -146,7 +150,22 @@ func QueryAndConvertResources(clientv1 upgradeclients.V1ClientInterface) (*Conve
 		return nil, err
 	}
 
-	//TODO QUERY AND CONVERT THE GLOBAL AND PER-HOST FELIX CONFIG
+	// Query and convert global felix configuration and cluster info.
+	fc := &FelixConfig{}
+	err = fc.queryAndConvertV1ToV3GlobalFelixConfigAndClusterInfo(
+		v1Client, res, convErr,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Query and convert host felix configuration.
+	err = fc.queryAndConvertV1ToV3HostFelixConfig(
+		v1Client, res, convErr,
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Query and convert the BGPPeers
 	if err := queryAndConvertV1ToV3Resources(
@@ -229,7 +248,7 @@ func queryAndConvertGlobalBGPConfig(clientv1 upgradeclients.V1ClientInterface, r
 				Msg:     "default ASNumber is not valid",
 				Cause:   err,
 			})
-			return nil
+			return err
 		}
 		globalBGPConfig.Spec.ASNumber = &asNum
 	}
@@ -409,6 +428,7 @@ func convertLogLevel(logLevel string) string {
 	}
 }
 
+<<<<<<< HEAD
 func status(msg string) {
 	log.Info(msg)
 	if displayStatus {
@@ -681,4 +701,279 @@ func applyToBackend(clientv3 clientv3.Interface, kvp *model.KVPair) error {
 	}
 
 	return err
+}
+
+type FelixConfig struct{}
+
+// Query the v1 format of GlobalConfigList and convert to the v3 format of
+// FelixConfiguration and ClusterInformation.
+func (fc *FelixConfig) queryAndConvertV1ToV3GlobalFelixConfigAndClusterInfo(
+	v1Client upgradeclients.V1Client,
+	res []runtime.Object,
+	convErr []ConversionError,
+) error {
+	// Query all of the global config into slice of KVPairs.
+	kvps, err := v1Client.List(model.GlobalConfigListOptions{})
+	if err != nil {
+		convErr = append(convErr, ConversionError{
+			Msg:   "Failed to get global config - this likely indicates an issue with the upgrade process, please raise a ticket with projectcalico",
+			Cause: err,
+		})
+		return err
+	}
+
+	// Convert kvs to global config.
+	globalConfig := apiv3.NewFelixConfiguration()
+	globalConfig.Name = "default"
+	if f, v, err := fc.convertFelixConfigV1KVToV3Resource(kvps, globalConfig); err != nil {
+		msg = fmt.
+		convErr = append(convErr, ConversionError{
+			Msg:   fc.errorMessage(f, v, "convert global config"),
+			Cause: err,
+		})
+		return err
+	}
+	res = append(res, globalConfig)
+
+	// Convert kvs to cluster info.
+	clusterInfo := apiv3.NewClusterInformation()
+	clusterInfo.Name = "default" // Do we need to worry about name for cluster info?
+	if f, v, err = fc.convertFelixConfigV1KVToV3Resource(kvps, clusterInfo); err != nil {
+		convErr = append(convErr, ConversionError{
+			Msg:   fc.errorMessage(f, v, "convert cluster info"),
+			Cause: err,
+		})
+		return err
+	}
+
+	// Get DataStoreReady value and set it.
+	if kvp, err := v1Client.Get(model.ReadyFlagKey{}); err != nil {
+		convErr = append(convErr, ConversionError{
+			Msg:   "Failed to get datastore ready - this likely indicates an issue with the upgrade process, please raise a ticket with projectcalico",
+			Cause: err,
+		})
+		return err
+	}
+	if vBool, err := strconv.ParseBool(kvp.Value.(string)); err != nil {
+		convErr = append(convErr, ConversionError{
+			Msg:   "Failed to convert datastore ready - this likely indicates an issue with the upgrade process, please raise a ticket with projectcalico",
+			Cause: err,
+		})
+		return err
+	}
+	clusterInfo.Spec.DatastoreReady = &vBool
+	res = append(res, clusterInfo)
+
+	return nil
+}
+
+// Query the v1 format of HostConfigList and convert to the v3 format of
+// FelixConfiguration.
+func (fc *FelixConfig) queryAndConvertV1ToV3HostFelixConfig(
+	v1Client upgradeclients.V1Client,
+	res []runtime.Object,
+	convErr []ConversionError,
+) error {
+	// Query all of the host meta slice of KVPairs.
+	kvpsMeta, err := v1Client.List(model.HostMetadataListOptions{})
+	if err != nil {
+		convErr = append(convErr, ConversionError{
+			Msg:   "Failed to get host meta - this likely indicates an issue with the upgrade process, please raise a ticket with projectcalico",
+			Cause: err,
+		})
+		return err
+	}
+
+	// For each host, get kvs for felix config and convert to v3 resource.
+	for _, kvpMeta := range kvpsMeta {
+		hostName := kvpMeta.Key.(model.HostMetadataKey).HostName
+
+		// Query all config for this host
+		kvps, err := v1Client.List(model.HostConfigListOptions{HostName: hostName})
+		if err != nil {
+			convErr = append(convErr, ConversionError{
+				Msg:   "Failed to get host config - this likely indicates an issue with the upgrade process, please raise a ticket with projectcalico",
+				Cause: err,
+			})
+			return err
+		}
+
+		// Convert to v3 resource.
+		hostConfig := apiv3.NewFelixConfiguration()
+		hostConfig.Name = fmt.Sprint("node.%s", hostName)
+		if f, v, err := fc.convertFelixConfigV1KVToV3Resource(kvps, hostConfig); err != nil {
+			msg = fmt.
+			convErr = append(convErr, ConversionError{
+				Msg:   fc.errorMessage(f, v, "convert host config"),
+				Cause: err,
+			})
+			return err
+		}
+		res = append(res, hostConfig)
+	}
+}
+
+// This function convert array of v1 KVPairs into a single v3 resource Spec for felix
+// configuration (global or per host) or a clusterInfo.
+// If error, return field name, string value and error.
+func (fc *FelixConfig) convertFelixConfigV1KVToV3Resource(
+	kvps *model.KVPair,
+	res *runtime.Object.
+) (string, string, error) {
+	// Extract the Spec from the resource FelixConfiguration or ClusterInfo.
+	specValue := reflect.ValueOf(res).Elem().FieldByName("Spec")
+	if !specValue.IsValid {
+		return "Spec", "", errors.ErroredField
+	}
+
+	// Get a map which maps v1 name to v3 name.
+	// Get a map which tell us if a field in V3 is a pointer.
+	specType := specValue.Type()
+	names := make(map[string]string, specType.NumField())
+	isPtrs := make(map[string]bool, specType.NumField())
+	for i := 0; i < specType.NumField(); i++ {
+		field := specType.Field(i)
+		names[fc.getConfigName(field)] = field.Name
+		isPtrs[field.Name] = (field.Type.Kind() == reflect.Ptr)
+	}
+
+	// Populate each field in the Spec struct from kvps.
+	for _, kvp := range kvps {
+		value := kvp.value
+		stringValue := value.(string)
+
+		// From v1 KVPair get key name.
+		switch key := kvp.Key.(type) {
+		case model.GlobalConfigKey:
+			nameV1: = key.Name
+		case model.HostConfigKey:
+			nameV1: = key.Name
+		default:
+			// continue if we cannot understand this type.
+			continue
+		}
+
+		if nameV3, ok := names[nameV1]; !ok {
+			// continue if this key is irelevant to V3.
+			continue
+		}
+
+		// Special case for LogSeverity to convert log level string
+		if strings.Index(nameV3, "LogSeverity") == 0 {
+			stringValue = convertLogLevel(stringValue)
+		}
+		// Special case for failsafePort
+		if strings.Index(nameV3, "Failsafe") == 0 {
+			field := specValue.FieldByName(nameV3)
+			if vProtoPort, err := fc.parseProtoPort(stringValue); err != nil {
+				return nameV3, stringValue, errors.ErrorParsingDatastoreEntry
+			}
+			field.Set(reflect.ValueOf(vProtoPort)) // pointer to proto port slice.
+			continue
+		}
+
+		// Set field to value
+		if isPtrs[nameV3] {
+			// field is a pointer and value is the interface to string.
+			field := specValue.FieldByName(nameV3)
+			if fieldType, err := specType.FieldByName(nameV3); err != nil {
+				return nameV3, stringValue, errors.ErroredField
+			}
+			kind := fieldType.Type.Elem().Kind()
+			switch kind {
+			case reflect.Int:
+				if vInt, err := strconv.Atoi(stringValue); err != nil {
+					return nameV3, stringValue, errors.ErrorParsingDatastoreEntry
+				}
+				field.Set(reflect.ValueOf(&vInt))
+			case reflect.Bool:
+				if vBool, err := strconv.ParseBool(stringValue); err != nil {
+					return nameV3, stringValue, errors.ErrorParsingDatastoreEntry
+				}
+				field.Set(reflect.ValueOf(&vBool))
+			case reflect.String:
+				field.Set(reflect.ValueOf(&stringValue))
+			default:
+				return nameV3, stringValue, errors.ErrorOperationNotSupported
+			}
+
+		} else {
+			field := specValue.FieldByName(nameV3)
+			switch field.Kind() {
+			case reflect.Int:
+				if vInt, err := strconv.ParseInt(stringValue, 0, 64); err != nil {
+					return nameV3, stringValue, errors.ErrorParsingDatastoreEntry
+				}
+				field.SetInt(vInt)
+			case reflect.Bool:
+				if vBool, err := strconv.ParseBool(stringValue); err != nil {
+					return nameV3, stringValue, errors.ErrorParsingDatastoreEntry
+				}
+				field.SetBool(vBool)
+			case reflect.String:
+				field.SetString(stringValue)
+			default:
+				return nameV3, stringValue, errors.ErrorOperationNotSupported
+			}
+		}
+	}
+
+	return "", "", nil
+}
+
+func (fc *FelixConfig) parseProtoPortFailed(msg string) error {
+	return  errors.New(fmt.Sprint("Failed to parse ProtoPort-%s", msg))
+}
+
+func (fc *FelixConfig) parseProtoPort(raw string) (*[]apiv3.ProtoPort, error) {
+	var result []apiv3.ProtoPort
+	for _, portStr := range strings.Split(raw, ",") {
+		portStr = strings.Trim(portStr, " ")
+		if portStr == "" {
+			continue
+		}
+
+		parts := strings.Split(portStr, ":")
+		if len(parts) > 2 {
+			return nil, fc.parseProtoPortFailed("ports should be <protocol>:<number> or <number>")
+		}
+		protocolStr := "tcp"
+		if len(parts) > 1 {
+			protocolStr = strings.ToLower(parts[0])
+			portStr = parts[1]
+		}
+		if protocolStr != "tcp" && protocolStr != "udp" {
+			return nil, fc.parseProtoPortFailed("unknown protocol: "+protocolStr)
+		}
+
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fc.parseProtoPortFailed("ports should be integers")
+		}
+		if port < 0 || port > 65535 {
+			err = fc.parseProtoPortFailed("ports must be in range 0-65535")
+			return nil, err
+		}
+		result = append(result, ProtoPort{
+			Protocol: protocolStr,
+			Port:     uint16(port),
+		})
+	}
+	return &result, nil
+}
+
+// Assembly an error message for convertion.
+func (fc *FelixConfig) errorMessage(field, value, action string) string {
+	return fmt.Sprint("Failed to %s (field %s value %s) - this likely indicates an issue with the upgrade process, please raise a ticket with projectcalico",
+		action, field, value)
+}
+
+// Return the config name from the field.  The field name is either specified in the
+// configname tag, otherwise it just uses the struct field name.
+func (fc *FelixConfig) getConfigName(field reflect.StructField) string {
+	name := field.Tag.Get("confignamev1")
+	if name == "" {
+		name = field.Name
+	}
+	return name
 }
