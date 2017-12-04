@@ -737,7 +737,7 @@ func (fc *FelixConfig) queryAndConvertV1ToV3GlobalFelixConfigAndClusterInfo(
 
 	// Convert kvs to cluster info.
 	clusterInfo := apiv3.NewClusterInformation()
-	clusterInfo.Name = "default" // Do we need to worry about name for cluster info?
+	clusterInfo.Name = "default"
 	if f, v, err = fc.convertFelixConfigV1KVToV3Resource(kvps, clusterInfo); err != nil {
 		convErr = append(convErr, ConversionError{
 			Msg:   fc.errorMessage(f, v, "convert cluster info"),
