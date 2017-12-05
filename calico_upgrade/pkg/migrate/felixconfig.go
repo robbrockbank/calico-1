@@ -92,7 +92,7 @@ func (fc *felixConfig) queryAndConvertFelixConfigV1ToV3(
 	for node, kvps := range nodeKvps {
 		// Convert to v3 resource.
 		nodeConfig := apiv3.NewFelixConfiguration()
-		nodeConfig.Name = fmt.Sprint("node.%s", node)
+		nodeConfig.Name = fmt.Sprint("node.", node)
 		if err := fc.parseFelixConfigV1IntoResourceV3(kvps, nodeConfig, data); err != nil {
 			return err
 		}
@@ -159,6 +159,13 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 		switch {
 		case strings.HasPrefix(fieldName, "Failsafe"):
 			// Special-case the Failsafe ports - these require parsing and settings as a struct.
+			if configStrValue == "none" {
+				// Has no failsafe ports
+				vProtoPort := &[]apiv3.ProtoPort{}
+				fieldValue.Set(reflect.ValueOf(vProtoPort))
+				continue
+			}
+
 			vProtoPort, err := fc.parseProtoPort(configStrValue)
 			if err != nil {
 				data.ConversionErrors = append(data.ConversionErrors, ConversionError{})
@@ -174,14 +181,14 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 		// Set the field value based on the field type.
 		var kind reflect.Kind
 		if isPtr {
-			kind = fieldValue.Elem().Kind()
+			kind = field.Type.Elem().Kind()
 		} else {
 			kind = fieldValue.Kind()
 		}
 
 		switch kind {
 		case reflect.Uint32:
-			if value, err := strconv.ParseUint(configStrValue, 10, 64); err != nil {
+			if value, err := strconv.ParseUint(configStrValue, 10, 32); err != nil {
 				continue
 			} else if isPtr {
 				vu := uint32(value)
@@ -226,7 +233,7 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 }
 
 func (fc *felixConfig) parseProtoPortFailed(msg string) error {
-	return errors.New(fmt.Sprint("Failed to parse ProtoPort-%s", msg))
+	return errors.New(fmt.Sprint("Failed to parse ProtoPort-", msg))
 }
 
 func (fc *felixConfig) parseProtoPort(raw string) (*[]apiv3.ProtoPort, error) {
@@ -241,12 +248,12 @@ func (fc *felixConfig) parseProtoPort(raw string) (*[]apiv3.ProtoPort, error) {
 		if len(parts) > 2 {
 			return nil, fc.parseProtoPortFailed("ports should be <protocol>:<number> or <number>")
 		}
-		protocolStr := "tcp"
+		protocolStr := "TCP"
 		if len(parts) > 1 {
-			protocolStr = strings.ToLower(parts[0])
+			protocolStr = strings.ToUpper(parts[0])
 			portStr = parts[1]
 		}
-		if protocolStr != "tcp" && protocolStr != "udp" {
+		if protocolStr != "TCP" && protocolStr != "UDP" {
 			return nil, fc.parseProtoPortFailed("unknown protocol: " + protocolStr)
 		}
 
@@ -263,6 +270,7 @@ func (fc *felixConfig) parseProtoPort(raw string) (*[]apiv3.ProtoPort, error) {
 			Port:     uint16(port),
 		})
 	}
+
 	return &result, nil
 }
 
