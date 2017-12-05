@@ -13,3 +13,18 @@
 // limitations under the License.
 
 package migrate
+
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	"github.com/projectcalico/libcalico-go/lib/testutils"
+)
+
+func TestClient(t *testing.T) {
+	testutils.HookLogrusForGinkgo()
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "calico-upgrade migration pkg suite")
+}

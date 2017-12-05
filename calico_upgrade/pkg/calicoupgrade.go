@@ -16,12 +16,12 @@ package main
 
 import (
 	"fmt"
-
 	"os"
 
-	"github.com/docopt/docopt-go"
-	"github.com/projectcalico/calicoctl/calicoctl/commands"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/docopt/docopt-go"
+	"github.com/projectcalico/calico/calico_upgrade/pkg/commands"
 )
 
 func main() {

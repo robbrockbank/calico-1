@@ -24,7 +24,7 @@ import (
 	"github.com/projectcalico/calico/calico_upgrade/pkg/commands/constants"
 )
 
-func Create(args []string) {
+func Validate(args []string) {
 	doc := constants.DatastoreIntro + `Usage:
   calico-upgrade validate [--calicov3-config=<V3CONFIG>] [--calicov2-config=<V2CONFIG>]
 

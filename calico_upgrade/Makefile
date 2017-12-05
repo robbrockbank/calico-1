@@ -63,7 +63,7 @@ vendor: glide.yaml
       glide install -strip-vendor'
 
 # build calico_upgrade image
-$(UPGRADE_CONTAINER_CREATED): pkg/Dockerfile.calico-upgrade dist/calico_upgrade
+$(UPGRADE_CONTAINER_CREATED): pkg/Dockerfile.calico-upgrade dist/calico-upgrade
 	docker build -t $(UPGRADE_CONTAINER_NAME) -f pkg/Dockerfile.calico-upgrade .
 	touch $@
 
@@ -74,11 +74,11 @@ binary: $(CALICO_UPGRADE_FILES) vendor
 	if [ "$(OS)" == "linux" ]; then \
 		INSTALL_FLAG=" -i "; \
 	fi; \
-	GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 go build -v $$INSTALL_FLAG -o dist/calico-upgrade-$(OS)-$(ARCH) $(LDFLAGS) "./pkg/calico_upgrade.go"
+	GOOS=$(OS) GOARCH=$(ARCH) CGO_ENABLED=0 go build -v $$INSTALL_FLAG -o dist/calico-upgrade-$(OS)-$(ARCH) $(LDFLAGS) "./pkg/calicoupgrade.go"
 
 dist/calico-upgrade: $(CALICO_UPGRADE_FILES) vendor
-	$(MAKE) dist/calico_upgrade-linux-amd64
-	mv dist/calico_upgrade-linux-amd64 dist/calico_upgrade
+	$(MAKE) dist/calico-upgrade-linux-amd64
+	mv dist/calico-upgrade-linux-amd64 dist/calico-upgrade
 
 dist/calico-upgrade-linux-amd64: $(CALICO_UPGRADE_FILES) vendor
 	$(MAKE) OS=linux ARCH=amd64 binary-containerized
@@ -88,7 +88,7 @@ dist/calico-upgrade-darwin-amd64: $(CALICO_UPGRADE_FILES) vendor
 
 dist/calico-upgrade-windows-amd64.exe: $(CALICO_UPGRADE_FILES) vendor
 	$(MAKE) OS=windows ARCH=amd64 binary-containerized
-	mv dist/calico_upgrade-windows-amd64 dist/calico_upgrade-windows-amd64.exe
+	mv dist/calico-upgrade-windows-amd64 dist/calico-upgrade-windows-amd64.exe
 
 ## Run the build in a container. Useful for CI
 binary-containerized: $(CALICO_UPGRADE_FILES) vendor
@@ -118,7 +118,7 @@ install:
 ###############################################################################
 .PHONY: ut
 ## Run the Unit Tests locally
-ut: dist/calico_upgrade
+ut: dist/calico-upgrade
 	# Run tests in random order find tests recursively (-r).
 	ginkgo -cover -r --skipPackage vendor pkg/*
 
@@ -138,7 +138,7 @@ ut: dist/calico_upgrade
 
 PHONY: test-containerized
 ## Run the tests in a container. Useful for CI, Mac dev.
-test-containerized: dist/calico_upgrade
+test-containerized: dist/calico-upgrade
 	docker run --rm -v $(CURDIR):/go/src/$(PACKAGE_NAME):rw \
     -e LOCAL_USER_ID=$(LOCAL_USER_ID) \
     $(CALICO_BUILD) sh -c 'cd /go/src/$(PACKAGE_NAME) && make ut'
@@ -164,7 +164,7 @@ ST_OPTIONS?=
 
 ## Run the STs in a container
 .PHONY: st
-st: dist/calico_upgrade run-etcd-host
+st: dist/calico-upgrade run-etcd-host
 	# Use the host, PID and network namespaces from the host.
 	# Privileged is needed since 'calico node' write to /proc (to enable ip_forwarding)
 	# Map the docker socket in so docker can be used from inside the container
@@ -206,7 +206,7 @@ semaphore: clean
 	$(MAKE) calico/ctl
 
 	# Make sure that calico-upgrade builds cross-platform.
-	$(MAKE) dist/calico_upgrade-darwin-amd64 dist/calico_upgrade-windows-amd64.exe
+	$(MAKE) dist/calico-upgrade-darwin-amd64 dist/calico-upgrade-windows-amd64.exe
 
 release: clean
 ifndef VERSION
@@ -219,7 +219,7 @@ endif
 	then echo current git working tree is "dirty". Make sure you do not have any uncommitted changes ;false; fi
 
 	# Build the calico-upgrade binaries, as well as the calico/ctl and calico/node images.
-	$(MAKE) dist/calico_upgrade dist/calico_upgrade-darwin-amd64 dist/calico_upgrade-windows-amd64.exe
+	$(MAKE) dist/calico-upgrade dist/calico-upgrade-darwin-amd64 dist/calico-upgrade-windows-amd64.exe
 	$(MAKE) calico/ctl
 
 	# Check that the version output includes the version specified.
@@ -242,7 +242,7 @@ endif
 	@docker images --format "{{.CreatedAt}}\tID:{{.ID}}\t{{.Repository}}:{{.Tag}}" $(UPGRADE_CONTAINER_NAME):$(VERSION)
 
 	@echo "\nNow push the tag and images. Then create a release on Github and"
-	@echo "attach dist/calico_upgrade, dist/calico_upgrade-darwin-amd64, and dist/calico_upgrade-windows-amd64.exe binaries"
+	@echo "attach dist/calico-upgrade, dist/calico-upgrade-darwin-amd64, and dist/calico-upgrade-windows-amd64.exe binaries"
 	@echo "\nAdd release notes for calico-upgrade. Use this command"
 	@echo "to find commit messages for this release: git log --oneline <old_release_version>...$(VERSION)"
 	@echo "git push origin $(VERSION)"

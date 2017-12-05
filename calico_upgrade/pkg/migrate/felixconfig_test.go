@@ -12,117 +12,167 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package migrate_test
+package migrate
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv3 "github.com/projectcalico/libcalico-go/lib/apis/v3"
 	"github.com/projectcalico/libcalico-go/lib/backend/model"
 	"github.com/projectcalico/libcalico-go/lib/backend/syncersv1/updateprocessors"
-	"github.com/projectcalico/calico/calico_upgrade/pkg/migrate"
-	"github.com/sirupsen/logrus"
+	cerrors "github.com/projectcalico/libcalico-go/lib/errors"
 )
 
 var _ = Describe("Test felix configuration upgrade", func() {
 	// Define some common values
+	int1 := int(12345)
+	bool1 := false
+	uint1 := uint32(1313)
+	int2 := int(12222)
+	bool2 := true
+	uint2 := uint32(1414)
 	perNodeFelixKey := model.ResourceKey{
 		Kind: apiv3.KindFelixConfiguration,
 		Name: "node.mynode",
+	}
+	perNodeFelix := apiv3.FelixConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: "node.mynode"},
+		Spec: apiv3.FelixConfigurationSpec{
+			RouteRefreshIntervalSecs: &int1,
+			InterfacePrefix:          "califoobar",
+			IPIPEnabled:              &bool1,
+			IptablesMarkMask:         &uint1,
+			FailsafeInboundHostPorts: &[]apiv3.ProtoPort{},
+			FailsafeOutboundHostPorts: &[]apiv3.ProtoPort{
+				{
+					Protocol: "TCP",
+					Port:     1234,
+				},
+				{
+					Protocol: "UDP",
+					Port:     22,
+				},
+				{
+					Protocol: "TCP",
+					Port:     65535,
+				},
+			},
+		},
 	}
 	globalFelixKey := model.ResourceKey{
 		Kind: apiv3.KindFelixConfiguration,
 		Name: "default",
 	}
+	globalFelix := apiv3.FelixConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		Spec: apiv3.FelixConfigurationSpec{
+			RouteRefreshIntervalSecs: &int2,
+			InterfacePrefix:          "califoobar",
+			IPIPEnabled:              &bool2,
+			IptablesMarkMask:         &uint2,
+			FailsafeInboundHostPorts: &[]apiv3.ProtoPort{
+				{
+					Protocol: "TCP",
+					Port:     1234,
+				},
+				{
+					Protocol: "UDP",
+					Port:     22,
+				},
+				{
+					Protocol: "TCP",
+					Port:     65535,
+				},
+			},
+		},
+	}
 	globalClusterKey := model.ResourceKey{
 		Kind: apiv3.KindClusterInformation,
 		Name: "default",
 	}
+	globalCluster := apiv3.ClusterInformation{
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		Spec: apiv3.ClusterInformationSpec{
+			ClusterGUID:    "abcedfg",
+			ClusterType:    "Mesos,K8s",
+			DatastoreReady: &bool2,
+		},
+	}
 
 	It("should handle different field types being assigned", func() {
-		cc := updateprocessors.NewFelixConfigUpdateProcessor()
-		By("converting a per-node felix KVPair with certain values and checking for the correct number of fields")
-		res := apiv3.NewFelixConfiguration()
-		int1 := int(12345)
-		bool1 := false
-		uint1 := uint32(1313)
-		res.Spec.RouteRefreshIntervalSecs = &int1
-		res.Spec.InterfacePrefix = "califoobar"
-		res.Spec.IPIPEnabled = &bool1
-		res.Spec.IptablesMarkMask = &uint1
-		res.Spec.FailsafeInboundHostPorts = &[]apiv3.ProtoPort{}
-		res.Spec.FailsafeOutboundHostPorts = &[]apiv3.ProtoPort{
-			{
-				Protocol: "TCP",
-				Port:     1234,
-			},
-			{
-				Protocol: "UDP",
-				Port:     22,
-			},
-			{
-				Protocol: "TCP",
-				Port:     65535,
-			},
-		}
+		client := fakeClient{}
 
-		// Convert v3 felix configuration into per host kvps.
-		kvps, err := cc.Process(&model.KVPair{
+		By("using an update processor to create v1 KVPairs from per-node FelixConfiguration")
+		cp := updateprocessors.NewFelixConfigUpdateProcessor()
+		kvps, err := cp.Process(&model.KVPair{
 			Key:   perNodeFelixKey,
-			Value: res,
+			Value: perNodeFelix,
 		})
 		Expect(err).NotTo(HaveOccurred())
+		client.kvps = kvps
 
-		// Convert back
-		fc := &migrate.FelixConfig{}
-		hostConfig := apiv3.NewFelixConfiguration()
-		hostConfig.Name = fmt.Sprint("node.%s", "mynode")
-		_, _, err := fc.convertFelixConfigV1KVToV3Resource(kvps, hostConfig)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(res).To(Equal(hostConfig)) // DeepEqual
-
-		// Convert v3 felix configuration into global kvps.
-		kvps, err = cc.Process(&model.KVPair{
+		By("using an update processor to create v1 KVPairs from global FelixConfiguration")
+		cp = updateprocessors.NewFelixConfigUpdateProcessor()
+		kvps, err = cp.Process(&model.KVPair{
 			Key:   globalFelixKey,
-			Value: res,
+			Value: globalFelix,
 		})
 		Expect(err).NotTo(HaveOccurred())
+		client.kvps = append(client.kvps, kvps...)
 
-		// Convert back
-		globalConfig := apiv3.NewFelixConfiguration()
-		globalConfig.Name = "default"
-		_, _, err := fc.convertFelixConfigV1KVToV3Resource(kvps, globalConfig)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(res).To(Equal(globalConfig)) // DeepEqual
-	})
-
-	It("should handle cluster config string slice field", func() {
-		cc := updateprocessors.NewClusterInfoUpdateProcessor()
-		By("converting a global cluster info KVPair with values assigned")
-		res := apiv3.NewClusterInformation()
-		res.Spec.ClusterGUID = "abcedfg"
-		res.Spec.ClusterType = "Mesos,K8s"
-		ready := true
-		res.Spec.DatastoreReady = &ready
-
-		kvps, err := cc.Process(&model.KVPair{
+		By("using an update processor to create v1 KVPairs from global ClusterInformation")
+		cp = updateprocessors.NewClusterInfoUpdateProcessor()
+		kvps, err = cp.Process(&model.KVPair{
 			Key:   globalClusterKey,
-			Value: res,
+			Value: globalCluster,
 		})
 		Expect(err).NotTo(HaveOccurred())
+		client.kvps = append(client.kvps, kvps...)
 
-		fc := &migrate.FelixConfig{}
-		clusterInfo := apiv3.NewClusterInformation()
-		clusterInfo.Name = "default"
-		_, _, err = fc.convertFelixConfigV1KVToV3Resource(kvps, clusterInfo); err != nil {
+		// Convert the data back to a set of resources.
+		data := &ConvertedData{}
+		fc := &felixConfig{}
+		err = fc.queryAndConvertFelixConfigV1ToV3(client, data)
 		Expect(err).NotTo(HaveOccurred())
-
-		Expect(res).To(Equal(clusterInfo)) // DeepEqual
-
+		Expect(data.Resources).To(HaveLen(3))
+		Expect(data.Resources[0]).To(Equal(globalFelix))
+		Expect(data.Resources[2]).To(Equal(globalCluster))
+		Expect(data.Resources[3]).To(Equal(perNodeFelix))
 	})
 })
+
+type fakeClient struct {
+	kdd  bool
+	kvps []*model.KVPair
+}
+
+func (fc fakeClient) Apply(d *model.KVPair) (*model.KVPair, error) {
+	return nil, nil
+}
+
+func (fc fakeClient) Get(k model.Key) (*model.KVPair, error) {
+	ks := k.String()
+	for _, kvp := range fc.kvps {
+		if kvp.Key.String() == ks {
+			return kvp, nil
+		}
+	}
+	return nil, cerrors.ErrorResourceDoesNotExist{Identifier: k}
+}
+
+func (fc fakeClient) List(l model.ListInterface) ([]*model.KVPair, error) {
+	r := []*model.KVPair{}
+	for _, kvp := range fc.kvps {
+		p, _ := model.KeyToDefaultPath(kvp.Key)
+		if l.KeyFromDefaultPath(p) != nil {
+			r = append(r, kvp)
+		}
+	}
+	return r, nil
+}
+
+func (fc fakeClient) IsKDD() bool {
+	return fc.kdd
+}
