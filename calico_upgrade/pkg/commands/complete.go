@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Tigera, Inc. All rights reserved.
+// Copyright (c) 2017 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,11 +39,11 @@ Options:
   -h --help                    Show this screen.
   --apiconfigv3=<V3_APICONFIG> Path to the file containing connection
                                configuration in YAML or JSON format for
-                               the Calico v1 API.
+                               the Calico v3 API.
                                [default: ` + constants.DefaultConfigPathV3 + `]
   --apiconfigv1=<V1_APICONFIG> Path to the file containing connection
                                configuration in YAML or JSON format for
-                               the Calico v3 API.
+                               the Calico v1 API.
                                [default: ` + constants.DefaultConfigPathV1 + `]
 
 Description:

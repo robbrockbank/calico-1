@@ -41,11 +41,11 @@ Options:
   -h --help                    Show this screen.
   --apiconfigv3=<V3_APICONFIG> Path to the file containing connection
                                configuration in YAML or JSON format for
-                               the Calico v1 API.
+                               the Calico v3 API.
                                [default: ` + constants.DefaultConfigPathV3 + `]
   --apiconfigv1=<V1_APICONFIG> Path to the file containing connection
                                configuration in YAML or JSON format for
-                               the Calico v3 API.
+                               the Calico v1 API.
                                [default: ` + constants.DefaultConfigPathV1 + `]
   --output-dir=<OUTPUTDIR>     Directory to store the data migration reports in.
                                [default: ` + constants.GetDefaultOutputDir() + `]

@@ -109,6 +109,7 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 	})
 
 	// Convert the KVP slice into a name value map.
+	oldKeys := map[string]model.Key{}
 	config := map[string]string{}
 	for _, kvp := range kvps {
 		if kvp.Value == nil {
@@ -117,8 +118,10 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 		switch key := kvp.Key.(type) {
 		case model.GlobalConfigKey:
 			config[key.Name] = kvp.Value.(string)
+			oldKeys[key.Name] = key
 		case model.HostConfigKey:
 			config[key.Name] = kvp.Value.(string)
+			oldKeys[key.Name] = key
 		}
 	}
 
@@ -157,14 +160,23 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 				// Has no failsafe ports
 				vProtoPort := &[]apiv3.ProtoPort{}
 				fieldValue.Set(reflect.ValueOf(vProtoPort))
+				setField = true
 				continue
 			}
 
 			vProtoPort, err := fc.parseProtoPort(configStrValue)
 			if err != nil {
-				data.ConversionErrors = append(data.ConversionErrors, ConversionError{})
+				logCxt.WithError(err).Info("Failed to parse field")
+				data.ConversionErrors = append(data.ConversionErrors, ConversionError{
+					Cause:   err,
+					KeyV1:   oldKeys[configName],
+					ValueV1: configStrValue,
+					KeyV3:   resourceToKey(res),
+				})
+				continue
 			}
 			fieldValue.Set(reflect.ValueOf(vProtoPort)) // pointer to proto port slice.
+			setField = true
 			continue
 		case strings.HasPrefix(fieldName, "LogSeverity"):
 			// The log level fields need to have their value converted to the appropriate v3 value,
@@ -183,6 +195,13 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 		switch kind {
 		case reflect.Uint32:
 			if value, err := strconv.ParseUint(configStrValue, 10, 32); err != nil {
+				logCxt.WithError(err).Info("Failed to parse uint32 field")
+				data.ConversionErrors = append(data.ConversionErrors, ConversionError{
+					Cause:   fmt.Errorf("failed to parse uint32 field: %v", err),
+					KeyV1:   oldKeys[configName],
+					ValueV1: configStrValue,
+					KeyV3:   resourceToKey(res),
+				})
 				continue
 			} else if isPtr {
 				vu := uint32(value)
@@ -192,6 +211,13 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 			}
 		case reflect.Int:
 			if value, err := strconv.ParseInt(configStrValue, 10, 64); err != nil {
+				logCxt.WithError(err).Info("Failed to parse int field")
+				data.ConversionErrors = append(data.ConversionErrors, ConversionError{
+					Cause:   fmt.Errorf("failed to parse int field: %v", err),
+					KeyV1:   oldKeys[configName],
+					ValueV1: configStrValue,
+					KeyV3:   resourceToKey(res),
+				})
 				continue
 			} else if isPtr {
 				vi := int(value)
@@ -201,6 +227,14 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 			}
 		case reflect.Bool:
 			if value, err := strconv.ParseBool(configStrValue); err != nil {
+				logCxt.WithError(err).Info("Failed to parse bool field")
+				data.ConversionErrors = append(data.ConversionErrors, ConversionError{
+					Cause:   fmt.Errorf("failed to parse bool field: %v", err),
+					KeyV1:   oldKeys[configName],
+					ValueV1: configStrValue,
+					KeyV3:   resourceToKey(res),
+				})
+				continue
 			} else if isPtr {
 				fieldValue.Set(reflect.ValueOf(&value))
 			} else {
@@ -213,6 +247,14 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 				fieldValue.SetString(configStrValue)
 			}
 		default:
+			logCxt.Info("Unhandle field type")
+			data.ConversionErrors = append(data.ConversionErrors, ConversionError{
+				Cause: fmt.Errorf("unhandled field type, please raise an issue on GitHub " +
+					"(https://github.com/projectcalico/calico) that includes this error message"),
+				KeyV1:   oldKeys[configName],
+				ValueV1: configStrValue,
+				KeyV3:   resourceToKey(res),
+			})
 			continue
 		}
 
@@ -227,7 +269,7 @@ func (fc *felixConfig) parseFelixConfigV1IntoResourceV3(
 }
 
 func (fc *felixConfig) parseProtoPortFailed(msg string) error {
-	return errors.New(fmt.Sprintf("Failed to parse ProtoPort-%s", msg))
+	return errors.New(fmt.Sprintf("failed to parse ProtoPort-%s", msg))
 }
 
 func (fc *felixConfig) parseProtoPort(raw string) (*[]apiv3.ProtoPort, error) {

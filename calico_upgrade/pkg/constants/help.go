@@ -1,4 +1,4 @@
-// Copyright (c) 2016 Tigera, Inc. All rights reserved.
+// Copyright (c) 2017 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@ package constants
 
 const (
 	DatastoreIntro = `Set the Calico datastore access information in the environment variables or
-or supply details in a config file. If you are using config files, use the v1
+supply details in a config file. If you are using config files, use the v1
 format of the config file (--apiconfigv1 param), and the v3 format of the
 config (--apiconfigv3 param). If you are using environment variables, the v1
-environments are all prefixed with "APIV1_"
+environments are all prefixed with 'APIV1_', for example:
+  APIV1_ETCD_ENDPOINTS=http://etcdcluster:2379
 
 `
 	Exiting = "Exiting..."
@@ -37,11 +38,6 @@ environments are all prefixed with "APIV1_"
       additional short qualifying suffix is appended. In rare circumstances
       the converted name (with the additional qualifier) may clash with other
       resources of the same kind.
-
-This may occur
-      because name formats in Calico v3 are in some cases more restrictive
-      than previous versions and the mapping used to convert a v1 name to a
-      v3 name is algorithmic. Generally, name clashes should be rare.
 
     ` + FileConversionErrors + `
       This contains a list of all of the errors converting the v1 data to
